@@ -1,156 +1,317 @@
 import os
 from pathlib import Path
-from winged_edge import EdgeMesh
+from winged_edge import EdgeMesh 
+
+def get_face_vertices(face, mesh_obj):
+    vertices = []
+    if not face.edge:
+        return vertices
+
+    start_edge = face.edge
+    current_edge = start_edge
+    
+    # security limit for edges in a face
+    MAX_EDGES_PER_FACE = 256 
+    if hasattr(mesh_obj, 'edges') and isinstance(mesh_obj.edges, dict) and mesh_obj.edges:
+        MAX_EDGES_PER_FACE = len(mesh_obj.edges) + 1
+
+    for _ in range(MAX_EDGES_PER_FACE):
+        if not current_edge: 
+            break
+        
+        if current_edge.left_face == face:
+            vertices.append(current_edge.vertex_start)
+            next_e = current_edge.next_left
+        
+        elif current_edge.right_face == face: 
+            vertices.append(current_edge.vertex_end)
+            next_e = current_edge.next_right
+        
+        else:
+            break 
+
+        if not next_e:
+            break 
+            
+        current_edge = next_e
+        if current_edge == start_edge:
+            break 
+    else:
+        pass
+
+    return vertices
+
+def clear():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
 def main():
-    # this code takes the 'Trabalho' directory to work as a root dir
-    root_dir = Path(__file__).resolve().parent.parent
-    objects_dir = root_dir/'Objects'
-
-    if not objects_dir.exists() or not objects_dir.is_dir():
-        print(f'Directory not found in {objects_dir}')
-        return
+    # using resolve() now
+    script_dir = Path(__file__).resolve().parent
+    possible_objects_dirs = [
+        script_dir.parent / 'Objects', 
+        script_dir / 'Objects',   
+        Path('../Objects').resolve()
+    ]
     
-    # grab every .obj file from the objects directory
+    objects_dir = None
+    for D_path in possible_objects_dirs:
+        if D_path.exists() and D_path.is_dir():
+            objects_dir = D_path
+            break
+    
+    if not objects_dir:
+        print("Dir 'Objects' not found.")
+        user_path = input("Please input the full path for the directory with the .obj files: ")
+        objects_dir = Path(user_path)
+
+    if not (objects_dir.exists() and objects_dir.is_dir()):
+        print(f"The path '{objects_dir.resolve()}' is not a valid path.\nClosing app.")
+        return
+
     obj_files = list(objects_dir.glob('*.obj'))
 
     if not obj_files:
-        print(f'No .obj file was found in {objects_dir}')
+        print(f'No .obj file found in {objects_dir.resolve()}')
         return
     
     meshes = {}
-
     for obj_file in obj_files:
-        mesh = EdgeMesh()
-        mesh.load_obj(obj_file)
-        meshes[obj_file.name] = mesh
+        mesh_instance = EdgeMesh()
+        try:
+            mesh_instance.load_obj(obj_file) 
+            meshes[obj_file.name] = mesh_instance
+            print(f"Loaded '{obj_file.name}'. Vertices: {len(mesh_instance.vertices)}, Faces: {len(mesh_instance.faces)}, Edges: {len(mesh_instance.edges)}")
+        except Exception as e:
+            print(f"Error loading {obj_file.name}: {e}")
+            # if more info is needed, we can use the code below
+            # import traceback
+            # traceback.print_exc()
 
-        print(f'Loaded {obj_file.name}')
-
-    # now we start the code for the user interaction
     file_names = list(meshes.keys())
-    print('Available objects:')
+    if not file_names:
+        print("No mesh was successfully built.")
+        return
+
+    print('\nFound objects:')
     for i, name in enumerate(file_names, start=1):
         print(f'{i}: {name}')
-    selection = int(input('Choose one of the available objects: '))
-    mesh = meshes[file_names[selection - 1]]
-
-    # main loop
-    while True:
-        print('\nAvailable functions:\
-              \n1: - Faces with the same vertex\
-              \n2: - Edges with the same vertex\
-              \n3: - Faces with the same edges\
-              \n4: - Edges in a Face\
-              \n5: - Faces adjacent to a face\
-              \n0: - Leave')
+    
+    current_mesh = None
+    selected_mesh_name = ""
+    while current_mesh is None:
+        try:
+            selection_input_str = input('Choose one of the objects: ')
+            
+            if not selection_input_str: 
+                return 
+            
+            selection = int(selection_input_str)
+            
+            if 1 <= selection <= len(file_names):
+                selected_mesh_name = file_names[selection - 1]
+                current_mesh = meshes[selected_mesh_name]
+                print(f"Object '{selected_mesh_name}' selected.")
+                print(f"Vertices: 1-{len(current_mesh.vertices)}, Faces: 1-{len(current_mesh.faces)}, Edges: {len(current_mesh.edges)}")
+            
+            else:
+                print('Not a valid option.')
+        except ValueError:
+            print('Entrada inválida. Por favor, insira um número.')
         
-        option = int(input('Select the option: '))
+        except IndexError:
+             print('Seleção fora do intervalo. Por favor, tente novamente.')
 
-        clear()
+    while True:
+        print(f'\nUsing {selected_mesh_name}')
+        print('Avaliable actions:\
+              \n1: - Faces that share the same vertex\
+              \n2: - Edges that share the same vertex\
+              \n3: - Faces that share the same edge\
+              \n4: - Edges from a face\
+              \n5: - Faces adjacent to a face\
+              \n\
+              \n0: - close')
+        
+        option_str = input('Selecione a opção: ')
+        
+        if not option_str: 
+            continue 
+
+        try:
+            option = int(option_str)
+        except ValueError:
+            print("Invalid option.")
+            clear() 
+            continue
+
+        clear() 
 
         match(option):
-            case 1:
-                v_id = int(input('Vertex id: '))
-                # faces have all values for faces that have the same v_id
-                faces = [f.index for f in mesh.faces.values() if v_id in get_face_vertices(f, mesh)]
-                print('Faces that share the same vertex:', faces)
+
+            case 1: 
+                try:
+                    v_id_input = int(input('Vertex ID: '))
+                    
+                    if v_id_input not in current_mesh.vertices:
+                        print(f"Vertex ID {v_id_input} not found in '{selected_mesh_name}'.")
+                        print(f"IDs available: 1 to {len(current_mesh.vertices)}.")
+                    
+                    else:
+                        found_faces = []
+                        for f_id, f_obj in current_mesh.faces.items():
+                            vertices_da_face = get_face_vertices(f_obj, current_mesh) 
+                            if v_id_input in vertices_da_face:
+                                found_faces.append(f_id)
+                        print(f'Faces that share the same Vertex {v_id_input}:', found_faces) 
+                
+                except ValueError:
+                    print("Vertex ID invalid.")
                 
             case 2:
-                v_id = int(input('Vertex id: '))
-                edges = [key for key, e in mesh.edges.items() if v_id in key]
-                print('Edges connected by the same vertex: ', edges)
+                try:
+                    v_id_input = int(input('Vertex ID: '))
+
+                    if v_id_input not in current_mesh.vertices:
+                        print(f"Vertex ID {v_id_input} not found in '{selected_mesh_name}'.")
+                        print(f"IDs available: 1 to {len(current_mesh.vertices)}.")
+                    
+                    else:
+                        edges_found = [key for key in current_mesh.edges.keys() if v_id_input in key]
+                        print(f'Edges conected by the Vertex {v_id_input}: ', edges_found)
+
+                except ValueError:
+                    print("Vertex ID invalid.")
 
             case 3:
-                v1 = int(input('Vertex start id: '))
-                v2 = int(input('Vertex end id: '))
-                key = min(v1, v2), max(v1, v2)
-                edge = mesh.edges.get(key)
+                try:
+                    v1_input = int(input('Starter Vertex ID'))
+                    v2_input = int(input('End Vertex ID'))
 
-                if edge:
-                    faces = []
-                    if edge.left_face: faces.append(edge.left_face.index)
-                    if edge.right_face: faces.append(edge.right_face.index)
-                    print('Faces that share the same edge: ', faces)
-                else:
-                    print('Edge not found')
+                    if v1_input not in current_mesh.vertices or v2_input not in current_mesh.vertices:
+                        print(f"One or both Vertex ({v1_input}, {v2_input}) not found in '{selected_mesh_name}'.")
+                        print(f"IDs available: 1 to {len(current_mesh.vertices)}.")
+
+                    elif v1_input == v2_input:
+                        print("IDs must be different")
+
+                    else:
+                        key = tuple(sorted((v1_input, v2_input)))
+                        edge = current_mesh.edges.get(key)
+                        
+                        if edge:
+                            faces_found = []
+                            if edge.left_face: faces_found.append(edge.left_face.index)
+                            if edge.right_face: faces_found.append(edge.right_face.index)
+                            print(f'Faces that share the edge ({v1_input}-{v2_input}): ', faces_found)
+                        
+                        else:
+                            print(f'Edge ({v1_input}-{v2_input}) not found.')
+
+                except ValueError:
+                    print("Vertex ID invalid.")
 
             case 4:
-                f_id = int(input('Face id: '))
-                face = mesh.faces.get(f_id)
+                try:
+                    f_id_input = int(input('Face ID: '))
+                    face = current_mesh.faces.get(f_id_input)
 
-                if face:
-                    edges = []
-                    start = face.edge
-                    current = start
-
-                    while current:
-                        key = (min(current.vertex_start, current.vertex_end),
-                               max(current.vertex_start, current.vertex_end))
-                        edges.append(key)
-                        current = current.next_left if current.left_face == face else current.nex_right
-                        
-                        if current == start:
-                            break
+                    if not face:
+                        print(f"Face {f_id_input} not found in '{selected_mesh_name}'.")
+                        print(f"Available Face IDs : 1 to {len(current_mesh.faces)}.")
                     
-                    print('Face edges: ', edges)
-                else:
-                    print('Face id not found')
-                
+                    else:
+                        edges_found = []
+                        
+                        if not face.edge:
+                            print(f'Face {f_id_input} doesn\'t have edges or is malformed.')
+                        
+                        else:
+                            start_edge_face = face.edge
+                            current_edge_face = start_edge_face
+                            iter_limit_face = len(current_mesh.edges) + 1 if current_mesh.edges else 256
+                            
+                            for _ in range(iter_limit_face): 
+                                
+                                if not current_edge_face: 
+                                    break 
+                                
+                                key_edge = tuple(sorted((current_edge_face.vertex_start, current_edge_face.vertex_end)))
+                                edges_found.append(key_edge)
+                                
+                                if current_edge_face.left_face == face:
+                                    current_edge_face = current_edge_face.next_left
+                                elif current_edge_face.right_face == face: 
+                                    current_edge_face = current_edge_face.next_right
+                                else: 
+                                    break
+                                
+                                if not current_edge_face or current_edge_face == start_edge_face: 
+                                    break
+                            else: 
+                                # limit
+                                pass
+                        print(f'Arestas na face {f_id_input}: ', edges_found)
+                except ValueError:
+                    print("Invalid Face ID.")
+            
             case 5:
-                f_id = int(input('Face id: '))
-                face = mesh.faces.get(f_id)
+                try:
+                    f_id_input = int(input('Face ID: '))
+                    face = current_mesh.faces.get(f_id_input)
 
-                if face:
-                    # for option 5, we return a set of adjacent faces
-                    adj = set()
-                    start = face.edge
-                    current = start
+                    if not face:
+                        print(f"Face {f_id_input} not found in '{selected_mesh_name}'.")
+                        print(f"Available Face IDs : 1 to {len(current_mesh.faces)}.")
 
-                    while current:
-                        # here we try to find a neighbor face to the face id
-                        neighbor = current.right_face if current.left_face == face else current.left_face
+                    else:
+                        adj_faces = set()
                         
-                        if neighbor:
-                            adj.add(neighbor.index)
+                        if not face.edge:
+                            print(f'Face {f_id_input} doesn\'t have edges or is malformed.')
                         
-                        current = current.next_left if current.left_face == face else current.next_right
-
-                        if current == start:
-                            break
-                    
-                    print('Adjacent faces:', list(adj))
-                else:
-                    print('Face id not found')
+                        else:
+                            start_edge_adj = face.edge
+                            current_edge_adj = start_edge_adj
+                            iter_limit_adj = len(current_mesh.edges) + 1 if current_mesh.edges else 256
+                            for _ in range(iter_limit_adj):
+                                if not current_edge_adj: 
+                                    break
+                                
+                                neighbor_face_obj = None
+                                if current_edge_adj.left_face == face: 
+                                    neighbor_face_obj = current_edge_adj.right_face
+                                
+                                elif current_edge_adj.right_face == face: 
+                                    neighbor_face_obj = current_edge_adj.left_face
+                                
+                                if neighbor_face_obj: 
+                                    adj_faces.add(neighbor_face_obj.index)
+                                
+                                if current_edge_adj.left_face == face: 
+                                    current_edge_adj = current_edge_adj.next_left
+                                
+                                elif current_edge_adj.right_face == face: 
+                                    current_edge_adj = current_edge_adj.next_right
+                                
+                                else: 
+                                    break
+                                
+                                if not current_edge_adj or current_edge_adj == start_edge_adj: 
+                                    break
+                            
+                            else: 
+                                pass
+                        
+                        print(f'Adjacent Faces to Face {f_id_input}:', list(adj_faces))
+                except ValueError:
+                    print("Invalid Face ID")
 
             case 0:
                 break
 
             case default:
-                print('Invalid option')
+                print('Invalid option.')
 
-def clear():
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-# create an auxiliar function to clean up the code
-def get_face_vertices(face, mesh):
-    vertices = []
-    start = face.edge
-    current = start
-
-    while current:
-        # here we check if we need to run the edge in clockwise or counter-clockwise
-        if current.left_face == face:
-            vertices.append(current.vertex_start)
-            current = current.next_left
-        else:
-            vertices.append(current.vertex_end)
-            current = current.next_right
-        # and if we end up at the start, we found all vertices
-        if current == start:
-            break
-    
-    return vertices
 
 if __name__ == '__main__':
     main()
