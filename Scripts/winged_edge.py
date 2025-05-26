@@ -138,3 +138,82 @@ class EdgeMesh:
                         edge_c.prev_right = edge_p
                 
                 face_id_counter += 1
+
+def save_mesh_to_obj(mesh_obj, filename):
+    if not mesh_obj:
+        print("No mesh data to save.")
+        return
+    
+    try:
+        with open(filename, 'w') as f:
+            f.write(f"# Saved from Python script\n")
+            f.write(f"# Vertices: {len(mesh_obj.vertices)}\n")
+            f.write(f"# Faces: {len(mesh_obj.faces)}\n")
+            
+            vertex_map = {}
+            for i, v_id in enumerate(sorted(mesh_obj.vertices.keys()), start=1):
+                vertex = mesh_obj.vertices[v_id]
+                f.write(f"v {vertex.coord[0]:.6f} {vertex.coord[1]:.6f} {vertex.coord[2]:.6f}\n")
+                vertex_map[v_id] = i
+
+            for face_id in sorted(mesh_obj.faces.keys()):
+                face = mesh_obj.faces[face_id]
+                face_vertex_original_ids = get_face_vertices(face, mesh_obj) 
+                
+                if not face_vertex_original_ids:
+                    # print(f"Warning: Face {face_id} has no vertices, skipping.")
+                    continue
+
+                face_vertex_file_indices = [vertex_map.get(original_id) for original_id in face_vertex_original_ids]
+                
+                if None in face_vertex_file_indices:
+                    # this might happen if get_face_vertices returns an ID not in vertex_map
+                    continue
+
+                f.write("f")
+                for v_idx in face_vertex_file_indices:
+                    f.write(f" {v_idx}")
+                f.write("\n")
+        print(f"Mesh saved to {filename}")
+
+    except Exception as e:
+        print(f"Error saving mesh to {filename}: {e}")
+
+def get_face_vertices(face, mesh_obj):
+    vertices = []
+    if not face.edge:
+        return vertices
+
+    start_edge = face.edge
+    current_edge = start_edge
+    
+    # security limit for edges in a face
+    MAX_EDGES_PER_FACE = 256 
+    if hasattr(mesh_obj, 'edges') and isinstance(mesh_obj.edges, dict) and mesh_obj.edges:
+        MAX_EDGES_PER_FACE = len(mesh_obj.edges) + 1
+
+    for _ in range(MAX_EDGES_PER_FACE):
+        if not current_edge: 
+            break
+        
+        if current_edge.left_face == face:
+            vertices.append(current_edge.vertex_start)
+            next_e = current_edge.next_left
+        
+        elif current_edge.right_face == face: 
+            vertices.append(current_edge.vertex_end)
+            next_e = current_edge.next_right
+        
+        else:
+            break 
+
+        if not next_e:
+            break 
+            
+        current_edge = next_e
+        if current_edge == start_edge:
+            break 
+    else:
+        pass
+
+    return vertices

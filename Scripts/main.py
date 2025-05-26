@@ -1,48 +1,170 @@
 import os
 from pathlib import Path
-from winged_edge import EdgeMesh 
-
-def get_face_vertices(face, mesh_obj):
-    vertices = []
-    if not face.edge:
-        return vertices
-
-    start_edge = face.edge
-    current_edge = start_edge
-    
-    # security limit for edges in a face
-    MAX_EDGES_PER_FACE = 256 
-    if hasattr(mesh_obj, 'edges') and isinstance(mesh_obj.edges, dict) and mesh_obj.edges:
-        MAX_EDGES_PER_FACE = len(mesh_obj.edges) + 1
-
-    for _ in range(MAX_EDGES_PER_FACE):
-        if not current_edge: 
-            break
-        
-        if current_edge.left_face == face:
-            vertices.append(current_edge.vertex_start)
-            next_e = current_edge.next_left
-        
-        elif current_edge.right_face == face: 
-            vertices.append(current_edge.vertex_end)
-            next_e = current_edge.next_right
-        
-        else:
-            break 
-
-        if not next_e:
-            break 
-            
-        current_edge = next_e
-        if current_edge == start_edge:
-            break 
-    else:
-        pass
-
-    return vertices
+from winged_edge import EdgeMesh
+from winged_edge import get_face_vertices
+from winged_edge import save_mesh_to_obj
+import numpy as np
+import transformations as transform
 
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
+
+# code for the second assigment
+def apply_transformations_to_mesh(mesh_obj, transformation_matrix):
+    # Applies the given transformation matrix to all vertices of the mesh.
+    if mesh_obj is None or transformation_matrix is None:
+        print("Error: Mesh object or transformation matrix is not available.")
+        return
+
+    count = 0
+    for vertex_id, vertex_obj in mesh_obj.vertices.items():
+        original_coord = vertex_obj.coord
+        
+        # Homogeneous coordinates for 3D
+        v_homogeneous = np.array([original_coord[0], original_coord[1], original_coord[2], 1.0])
+        
+        # Apply transformation: M @ v
+        transformed_v_homogeneous = transformation_matrix @ v_homogeneous
+        
+        # Convert back to Cartesian coordinates (perspective division)
+        w = transformed_v_homogeneous[3]
+        if w == 0: 
+            print(f"Warning: Homogeneous w component is zero for vertex {vertex_id} after transformation. Skipping update.")
+            continue
+        
+        # Update vertex coordinate in the mesh object
+        vertex_obj.coord = (
+            transformed_v_homogeneous[0] / w,
+            transformed_v_homogeneous[1] / w,
+            transformed_v_homogeneous[2] / w
+        )
+        count += 1
+    print(f"Transformation applied to {count} vertices.")
+
+def handle_transformations_submenu(current_mesh_obj, selected_mesh_name_str):
+    if current_mesh_obj is None:
+        print("No mesh selected to transform.")
+        return
+
+    print(f"\n--- Transformation Submenu for '{selected_mesh_name_str}' ---")
+
+    # as we are working with a sequence of transformations, we will use a list here
+    transform_sequence = []
+
+    while True:
+        print("\nCurrent transformation sequence (applied in order):")
+        
+        if not transform_sequence:
+            print("  (empty)")
+        
+        else:
+            for i, trans in enumerate(transform_sequence):
+                # Format the display of the transformation
+                op_name = trans[0]
+                params_str = ", ".join(map(str, trans[1:]))
+                print(f"  {i+1}. {op_name}({params_str})")
+        
+        print("\nTransformation options:")
+        print("  1. Add Translation (tx, ty, tz)")
+        print("  2. Add Scaling (sx, sy, sz)")
+        print("  3. Add Rotation around X-axis (angle_degrees)")
+        print("  4. Add Rotation around Y-axis (angle_degrees)")
+        print("  5. Add Rotation around Z-axis (angle_degrees)")
+        print("  6. Clear current sequence")
+        print("  7. Finalize sequence and apply to mesh")
+        print("  8. Back to main menu")
+
+        sub_option_str = input("Select transformation option: ")
+        if not sub_option_str: continue
+
+        try:
+            sub_option = int(sub_option_str)
+
+        except ValueError:
+            print("Invalid option. Please enter a number.")
+            continue
+        
+        if sub_option == 1:
+            try:
+                tx = float(input("Enter tx (translation along X): "))
+                ty = float(input("Enter ty (translation along Y): "))
+                tz = float(input("Enter tz (translation along Z): "))
+                transform_sequence.append(('translate', tx, ty, tz))
+                print("Translation added to sequence.")
+            except ValueError:
+                print("Invalid input for translation values. Please enter numbers.")
+        
+        elif sub_option == 2:
+            try:
+                sx = float(input("Enter sx (scaling factor for X): "))
+                sy = float(input("Enter sy (scaling factor for Y): "))
+                sz = float(input("Enter sz (scaling factor for Z): "))
+                if sx == 0 or sy == 0 or sz == 0:
+                    print("Warning: Scaling factor of zero can make the object disappear or degenerate.")
+                transform_sequence.append(('scale', sx, sy, sz))
+                print("Scaling added to sequence.")
+            except ValueError:
+                print("Invalid input for scaling factors. Please enter numbers.")
+
+        elif sub_option == 3:
+            try:
+                angle = float(input("Enter rotation angle around X-axis (degrees): "))
+                transform_sequence.append(('rotateX', angle))
+                print("RotationX added to sequence.")
+            except ValueError:
+                print("Invalid input for angle. Please enter a number.")
+        
+        elif sub_option == 4:
+            try:
+                angle = float(input("Enter rotation angle around Y-axis (degrees): "))
+                transform_sequence.append(('rotateY', angle))
+                print("RotationY added to sequence.")
+            except ValueError:
+                print("Invalid input for angle. Please enter a number.")
+
+        elif sub_option == 5:
+            try:
+                angle = float(input("Enter rotation angle around Z-axis (degrees): "))
+                transform_sequence.append(('rotateZ', angle))
+                print("RotationZ added to sequence.")
+            except ValueError:
+                print("Invalid input for angle. Please enter a number.")
+        
+        elif sub_option == 6:
+            transform_sequence = []
+            print("Transformation sequence cleared.")
+
+        elif sub_option == 7:
+            if not transform_sequence:
+                print("No transformations in the sequence to apply.")
+            else:
+                print("Building composite transformation matrix...")
+                try:
+                    # All transformations are 3D for .obj files
+                    composite_matrix = T.build_transformation_matrix(transform_sequence, dim=3)
+                    print("Composite Transformation Matrix:\n", composite_matrix)
+                    
+                    apply_transformations_to_mesh(current_mesh_obj, composite_matrix)
+                    print(f"Object '{selected_mesh_name_str}' has been transformed.")
+                    print("The transformation is now part of the current object's vertex data.")
+                    
+                    # Clear sequence after applying
+                    transform_sequence = []
+                except Exception as e:
+                    print(f"An error occurred during transformation: {e}")
+            break 
+
+        elif sub_option == 8:
+            print("Returning to main menu. Current transformation sequence (if any) discarded.")
+            break
+        
+        else:
+            print("Invalid transformation option. Please try again.")
+        
+        if sub_option not in [7, 8]: 
+             input("\nPress Enter to continue with transformations...")
+             clear()
+
 
 def main():
     # using resolve() now
@@ -129,6 +251,7 @@ def main():
               \n3: - Faces that share the same edge\
               \n4: - Edges from a face\
               \n5: - Faces adjacent to a face\
+              \n6: - Apply Transformations to Object\
               \n\
               \n0: - close')
         
@@ -305,6 +428,10 @@ def main():
                         print(f'Adjacent Faces to Face {f_id_input}:', list(adj_faces))
                 except ValueError:
                     print("Invalid Face ID")
+
+            case 6:
+                handle_transformations_submenu(current_mesh, selected_mesh_name)
+                save_mesh_to_obj(current_mesh, selected_mesh_name)
 
             case 0:
                 break
