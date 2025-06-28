@@ -8,11 +8,12 @@ This project was created to be worked on as the final assingment for the Compute
 First the following libraries are needed:
 - pygame
 - numpy
-Just run:
+
+Just run:<br>
 `pip install numpy pygame`
 
-To run the code, just run the following command
+To run the code, just run the following command:<br>
 `python3 gui_main.py`
 
-To review older versions without the application of a GUI, use:
+To review older versions without the application of a GUI, use:<br>
 `python3 main.py`
