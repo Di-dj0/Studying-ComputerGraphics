@@ -4,7 +4,7 @@ from winged_edge import EdgeMesh
 from winged_edge import get_face_vertices
 from winged_edge import save_mesh_to_obj
 import numpy as np
-import transformations as transform
+import transformations as T
 
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
